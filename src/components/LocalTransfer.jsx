@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import socket from '../socket';
 
 // Default Port used by Agent
-const DEFAULT_AGENT_PORT = 5178;
+const DEFAULT_AGENT_PORT = 3000;
 
 const LocalTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
     const [agentStatus, setAgentStatus] = useState(null); // { online, port, activeFile, ip }
     const [customPort, setCustomPort] = useState(DEFAULT_AGENT_PORT);
     const [remoteAgent, setRemoteAgent] = useState(null); // peer agent info
     const [downloads, setDownloads] = useState([]); // track downloads
+    const [downloadProgress, setDownloadProgress] = useState(0); // agent download progress
+    const [downloadSpeed, setDownloadSpeed] = useState(0); // agent download speed in MB/s
 
     // Poll Local Agent
     useEffect(() => {
@@ -67,9 +69,26 @@ const LocalTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         socket.on('agent_file_announce', handleAgentAnnounce);
         socket.on('user_joined', handleUserJoined);
 
+        // Listen for download progress from agent
+        const handleDownloadProgress = (data) => {
+            if (data.roomId === roomId) {
+                console.log('Download progress:', data.progress, 'Speed:', data.speed);
+                setDownloadProgress(data.progress);
+                setDownloadSpeed(data.speed || 0);
+                if (data.progress === 100) {
+                    setTimeout(() => {
+                        setDownloadProgress(0);
+                        setDownloadSpeed(0);
+                    }, 2000); // Reset after 2s
+                }
+            }
+        };
+        socket.on('agent_download_progress', handleDownloadProgress);
+
         return () => {
             socket.off('agent_file_announce', handleAgentAnnounce);
             socket.off('user_joined', handleUserJoined);
+            socket.off('agent_download_progress', handleDownloadProgress);
         };
     }, [roomId, isHost, agentStatus]);
 
@@ -123,8 +142,8 @@ const LocalTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                 alert(`Download started! \nFile will auto-play when ready.`);
                 setDownloads(prev => [...prev, remoteAgent.name]);
 
-                // VIEWER PLAYBACK: Play from local downloads folder
-                // Agent saves it to ./downloads/filename
+                // VIEWER PLAYBACK: Play from agent's temp downloads folder
+                // Agent saves it to %TEMP%/chitrakatha_downloads/filename
                 const safeName = remoteAgent.name;
                 const playbackUrl = `http://127.0.0.1:${customPort}/downloads/${safeName}`;
                 console.log("Viewer loading local file:", playbackUrl);
@@ -247,9 +266,35 @@ const LocalTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                         <span style={{ fontSize: '0.8rem', opacity: 0.7 }}> ({(remoteAgent.size / 1024 / 1024).toFixed(1)} MB)</span>
                     </p>
 
-                    <button onClick={handleDownload} className="secondary-btn">
-                        ⬇️ Download to Disk & Play
-                    </button>
+                    <div style={{ marginTop: '15px' }}>
+                        <button onClick={handleDownload} style={{ width: '100%' }} className="secondary-btn">
+                            ⬇️ Download to Disk & Play
+                        </button>
+
+                        {downloadProgress > 0 && downloadProgress < 100 && (
+                            <div style={{ marginTop: '10px' }}>
+                                <div style={{
+                                    width: '100%',
+                                    height: '8px',
+                                    background: 'rgba(255,255,255,0.1)',
+                                    borderRadius: '4px',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{
+                                        width: `${downloadProgress}%`,
+                                        height: '100%',
+                                        background: 'linear-gradient(90deg, var(--primary), var(--accent))',
+                                        transition: 'width 0.3s ease',
+                                        borderRadius: '4px'
+                                    }} />
+                                </div>
+                                <p style={{ fontSize: '0.8rem', marginTop: '5px', opacity: 0.8 }}>
+                                    Downloading: {downloadProgress}%
+                                    {downloadSpeed > 0 && <span style={{ marginLeft: '10px', opacity: 0.6 }}>({downloadSpeed.toFixed(2)} MB/s)</span>}
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -263,6 +308,9 @@ const LocalTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                     <ul style={{ margin: '5px 0 0 20px', padding: 0 }}>
                         {downloads.map((d, i) => <li key={i} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{d}</li>)}
                     </ul>
+                    <p style={{ margin: '8px 0 0 0', opacity: 0.6, fontSize: '0.75rem' }}>
+                        📁 Saved to: <code>%TEMP%\chitrakatha_downloads\</code>
+                    </p>
                 </div>
             )}
         </div>
