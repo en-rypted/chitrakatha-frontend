@@ -9,7 +9,16 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
     // For Client:
     const [fileMeta, setFileMeta] = useState(null);
     const [downloadProgress, setDownloadProgress] = useState(0);
+    const [downloadSpeed, setDownloadSpeed] = useState('');
     const [isDownloading, setIsDownloading] = useState(false);
+
+    // Speed calculation ref
+    const speedRef = useRef({
+        lastTime: Date.now(),
+        bytesReceived: 0
+    });
+
+
 
     // Both:
     const chunksRef = useRef([]);
@@ -226,6 +235,20 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
             } else {
                 chunksRef.current.push(data);
 
+                // Speed Calculation
+                const now = Date.now();
+                speedRef.current.bytesReceived += data.byteLength;
+                const timeDiff = now - speedRef.current.lastTime;
+
+                if (timeDiff >= 1000) {
+                    const speedBytes = (speedRef.current.bytesReceived / timeDiff) * 1000;
+                    const speedMB = (speedBytes / (1024 * 1024)).toFixed(2);
+                    setDownloadSpeed(`${speedMB} MB/s`);
+
+                    speedRef.current.lastTime = now;
+                    speedRef.current.bytesReceived = 0;
+                }
+
                 // Calculate progress
                 const received = chunksRef.current.reduce((acc, chunk) => acc + chunk.byteLength, 0);
                 // Prevent divide by zero
@@ -270,7 +293,10 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
 
             {isDownloading && (
                 <div className="animate-fade-in">
-                    <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>downloading {downloadProgress}%</p>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>
+                        downloading {downloadProgress}%
+                        {downloadSpeed && <span style={{ opacity: 0.6, fontSize: '0.8rem', marginLeft: '10px' }}>({downloadSpeed})</span>}
+                    </p>
                     <div style={{
                         width: '100%',
                         height: '2px',

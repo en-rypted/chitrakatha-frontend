@@ -148,7 +148,7 @@ const VideoPlayer = ({ src, roomId, isHost, autoResume }) => {
                         onError={(e) => {
                             console.error("Video Error:", e.target.error);
                         }}
-                        style={{ maxHeight: '80vh', backgroundColor: '#000', display: 'block' }}
+                        style={{ backgroundColor: '#000', display: 'block' }}
                     />
                     {/* Optional: Add an error overlay state if needed, but for now simple log */}
                 </div>

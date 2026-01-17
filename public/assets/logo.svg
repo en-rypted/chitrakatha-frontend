@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="ckGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4caf50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2a9d8f;stop-opacity:1" />
+    </linearGradient>
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="50" cy="50" r="48" fill="#121212" stroke="url(#ckGrad)" stroke-width="2" />
+
+  <!-- The "C" - Film Strip Style -->
+  <path d="M 65 30 A 25 25 0 1 0 65 70" stroke="url(#ckGrad)" stroke-width="8" stroke-linecap="round" fill="none" filter="url(#neon)" />
+  <!-- Sprocket holes for Film Strip feel -->
+  <path d="M 30 30 A 20 20 0 0 0 30 70" stroke="#121212" stroke-width="2" stroke-dasharray="4 6" fill="none" opacity="0.6" />
+
+  <!-- The "K" - Play Button Integration -->
+  <path d="M 55 35 L 55 65 L 80 50 Z" fill="url(#ckGrad)" transform="translate(5, 0)" filter="url(#neon)" />
+  
+  <!-- "K" Line Leg (Making the play button look like part of K) -->
+  <!-- Actually, lets simpler: Vertical line + Play Button = K abstract -->
+  <line x1="50" y1="35" x2="50" y2="65" stroke="url(#ckGrad)" stroke-width="5" stroke-linecap="round" />
+  
+</svg>
