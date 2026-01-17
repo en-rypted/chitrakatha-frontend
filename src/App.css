@@ -43,6 +43,27 @@ header {
   white-space: nowrap;
 }
 
+.nav-link {
+  text-decoration: none;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  margin-right: 15px;
+}
+
+.nav-link:hover {
+  color: var(--primary);
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.nav-link.active {
+  color: var(--primary);
+  background: rgba(255, 152, 0, 0.2);
+}
+
 .status-group {
   display: flex;
   gap: 15px;
@@ -99,9 +120,13 @@ main {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   /* Center vertically */
   position: relative;
+}
+
+main.docs-mode {
+  justify-content: flex-start;
+  padding-top: 0px;
 }
 
 /* Main Content Wrapper */
@@ -155,8 +180,13 @@ main.joined {
     max-width: 400px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    /* Align to top */
     height: 100%;
+    overflow-y: auto;
+    /* Enable Scroll */
+    padding-top: 20px;
+    /* Space from top */
   }
 }
 

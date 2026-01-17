@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const RoomControls = ({ onJoinRoom, onVideoSelect, joinedRoom }) => {
+const RoomControls = ({ onJoinRoom, onVideoSelect, joinedRoom, onLeaveRoom }) => {
     const [roomId, setRoomId] = useState('');
     const [videoUrl, setVideoUrl] = useState('');
 
@@ -43,8 +43,23 @@ const RoomControls = ({ onJoinRoom, onVideoSelect, joinedRoom }) => {
                 </div>
             ) : (
                 <div className="animate-fade-in" style={{ textAlign: 'center', marginBottom: '30px' }}>
-                    <div style={{ marginBottom: '20px', color: 'var(--text-muted)' }}>
-                        room: <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{joinedRoom}</span>
+                    <div style={{ marginBottom: '20px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+                        <span>room: <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{joinedRoom}</span></span>
+                        <button
+                            onClick={onLeaveRoom}
+                            style={{
+                                background: 'rgba(255, 23, 68, 0.1)',
+                                color: '#ff1744', // Red color
+                                border: '1px solid rgba(255, 23, 68, 0.3)',
+                                fontSize: '0.7rem',
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                            title="Discard / Leave Room"
+                        >
+                            ✖ leave
+                        </button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', alignItems: 'center' }}>

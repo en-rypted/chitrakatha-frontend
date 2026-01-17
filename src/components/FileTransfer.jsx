@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SimplePeer from 'simple-peer';
 import socket from '../socket';
+import LocalTransfer from './LocalTransfer';
+
 
 const STUN_CONFIG = {
     iceServers: [
@@ -17,7 +19,7 @@ const STUN_CONFIG = {
     ]
 };
 
-const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
+const WebRTCTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
     // For Host:
     const [peers, setPeers] = useState({}); // { socketId: peerInstance }
 
@@ -35,8 +37,6 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
 
     // UI Throttling
     const lastUIUpdateRef = useRef(0);
-
-
 
     // Both:
     const chunksRef = useRef([]);
@@ -111,7 +111,6 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         };
 
         socket.on('host_file_meta', handleHostFileMeta);
-        // Attach listener for Host (Client listener is in separate useEffect)
         if (isHost) {
             socket.on('p2p_signal', handleP2PSignal);
         }
@@ -156,11 +155,7 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         const readNextChunk = () => {
             if (peer.destroyed) return;
 
-            // CRITICAL OPTIMIZATION:
-            // Check WebRTC buffer directly. If full, wait (throttle).
-            // Do NOT use peer.write() or 'drain'.
             if (peer._channel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-                // Buffer full, retry in 50ms
                 setTimeout(readNextChunk, 50);
                 return;
             }
@@ -171,13 +166,12 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
 
         reader.onload = (e) => {
             if (peer.destroyed) return;
-            const chunk = e.target.result; // ArrayBuffer is fine for .send()
+            const chunk = e.target.result;
 
             try {
                 peer.send(chunk);
                 offset += chunk.byteLength;
 
-                // Log progress
                 const percent = Math.floor((offset / file.size) * 100);
                 if (percent >= lastLoggedPercent + 10) {
                     console.log(`[Sender] Progress: ${percent}%`);
@@ -185,9 +179,9 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                 }
 
                 if (offset < file.size) {
-                    readNextChunk(); // Keep pumping data
+                    readNextChunk();
                 } else {
-                    peer.send('Done'); // Sentinel
+                    peer.send('Done');
                     console.log("[Sender] File sent completely");
                 }
             } catch (err) {
@@ -204,6 +198,8 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         if (!fileMeta) return;
         setIsDownloading(true);
         chunksRef.current = [];
+
+        speedRef.current = { lastTime: Date.now(), bytesReceived: 0 };
 
         console.log("[Receiver] Starting download from Host:", fileMeta.hostId);
         const peer = new SimplePeer({
@@ -237,7 +233,6 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         });
 
         peer.on('data', (data) => {
-            // Check for 'Done' message safely
             let text = '';
             try {
                 text = new TextDecoder().decode(data);
@@ -271,32 +266,26 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
 
                 // Calculate progress
                 const received = chunksRef.current.reduce((acc, chunk) => acc + chunk.byteLength, 0);
-                // Prevent divide by zero
                 const total = fileMeta.size || 1;
                 const percent = Math.round((received / total) * 100);
 
-                // Update UI less frequently to save renders? (Optional, but react handles it okay usually)
-                setDownloadProgress(percent);
+                if (now - lastUIUpdateRef.current > 200) {
+                    setDownloadProgress(percent);
+                    lastUIUpdateRef.current = now;
+                }
             }
         });
     };
 
-    // Need Host ID for handshake.
-    // We will update Server to relay signaling correctly.
-    // Actually, socket.io `to(socketId)` is strictly 1:1.
-    // We need Host's socket ID.
-
     const handlePreview = () => {
         if (chunksRef.current.length === 0) return;
-
-        console.log("[Receiver] Generating preview...");
         const blob = new Blob(chunksRef.current, { type: fileMeta.type || 'video/mp4' });
         const url = URL.createObjectURL(blob);
         onFileReceived(url);
     };
 
     return (
-        <div style={{ marginTop: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <div className="animate-fade-in">
             {!isHost && fileMeta && !isDownloading && (
                 <div className="animate-fade-in">
                     <p style={{ fontSize: '1rem', margin: '10px 0' }}>
@@ -332,7 +321,6 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                         }}></div>
                     </div>
 
-                    {/* Preview Button */}
                     {downloadProgress > 10 && (
                         <button
                             onClick={handlePreview}
@@ -353,7 +341,6 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                 </div>
             )}
 
-            {/* Download Complete: Show Save Button */}
             {!isDownloading && downloadProgress === 100 && (
                 <div className="animate-fade-in" style={{ marginBottom: '20px' }}>
                     <p style={{ color: '#4caf50', margin: '0 0 10px 0', fontSize: '0.9rem' }}>✓ download complete</p>
@@ -390,6 +377,76 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                     ● sharing active: {fileToShare.name}
                 </div>
             )}
+        </div>
+    );
+};
+
+const FileTransfer = (props) => {
+    const [mode, setMode] = useState('webrtc'); // 'webrtc' | 'agent' | 'docs'
+
+    return (
+        <div className="file-transfer-card" style={{
+            marginTop: '20px',
+            background: 'var(--glass)',
+            borderRadius: '16px',
+            padding: '20px',
+            border: '1px solid var(--glass-border)',
+            textAlign: 'center'
+        }}>
+
+            {/* Mode Toggle */}
+            <div className="transfer-mode-toggle" style={{
+                display: 'inline-flex',
+                gap: '8px',
+                background: 'rgba(0,0,0,0.3)',
+                padding: '4px',
+                borderRadius: '8px',
+                marginBottom: '20px'
+            }}>
+                <button
+                    onClick={() => setMode('webrtc')}
+                    style={{
+                        background: mode === 'webrtc' ? 'var(--primary)' : 'transparent',
+                        color: mode === 'webrtc' ? '#000' : 'var(--text-muted)',
+                        border: 'none',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s'
+                    }}
+                >
+                    🌐 Browser P2P
+                </button>
+                <button
+                    onClick={() => setMode('agent')}
+                    style={{
+                        background: mode === 'agent' ? '#ff9800' : 'transparent',
+                        color: mode === 'agent' ? '#000' : 'var(--text-muted)',
+                        border: 'none',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s'
+                    }}
+                >
+                    🚀 Local Agent
+                </button>
+
+            </div>
+
+            {/* Render Active Component */}
+            <div style={{ width: '100%' }}>
+                {mode === 'webrtc' ? (
+                    <WebRTCTransfer {...props} />
+                ) : (
+                    <LocalTransfer {...props} />
+                )}
+            </div>
+
         </div>
     );
 };

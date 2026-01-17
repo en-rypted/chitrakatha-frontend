@@ -17,6 +17,11 @@ if (import.meta.env.DEV) {
 
 console.log(`Socket connecting to: ${backendUrl}`);
 
-const socket = io(backendUrl);
+const URL = process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:3001';
+
+
+const socket = io(URL, {
+    autoConnect: true
+});
 
 export default socket;

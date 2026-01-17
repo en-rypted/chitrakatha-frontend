@@ -1,21 +1,30 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import socket from './socket';
-import RoomControls from './components/RoomControls';
-import VideoPlayer from './components/VideoPlayer';
+import Home from './components/Home';
+import Documentation from './components/Documentation';
+import PasswordModal from './components/PasswordModal';
 import './App.css';
-
-import FileTransfer from './components/FileTransfer';
 
 function App() {
   const [joinedRoom, setJoinedRoom] = useState(null);
   const [videoSrc, setVideoSrc] = useState(null);
-  const [videoFile, setVideoFile] = useState(null); // Track actual file for P2P
+  const [videoFile, setVideoFile] = useState(null);
   const [isHost, setIsHost] = useState(false);
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [lastLog, setLastLog] = useState("Waiting for events...");
   const [userCount, setUserCount] = useState(0);
 
+  // Auth State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [pendingRoomId, setPendingRoomId] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState(false);
+
+  const location = useLocation();
+
   useEffect(() => {
+    // ... (socket event listeners remain the same)
     function onConnect() {
       setIsConnected(true);
       setLastLog("Socket Connected!");
@@ -39,8 +48,6 @@ function App() {
     socket.on('disconnect', onDisconnect);
     socket.on('sync_action', onSyncAction);
     socket.on('room_users_update', onRoomUsersUpdate);
-
-    // Initial check
     setIsConnected(socket.connected);
 
     socket.on('is_host', (status) => {
@@ -58,10 +65,51 @@ function App() {
     };
   }, []);
 
-  const handleJoinRoom = (roomId) => {
-    socket.emit('join_room', roomId);
-    setJoinedRoom(roomId);
-    setLastLog(`Joined Room: ${roomId}`);
+  const handleJoinRoom = (roomId, password = null) => {
+    setAuthLoading(true);
+    setAuthError(false);
+
+    // Try to join
+    socket.emit('join_room', { roomId, password }, (response) => {
+      setAuthLoading(false);
+
+      if (response && response.success) {
+        setJoinedRoom(roomId);
+        setLastLog(`Joined Room: ${roomId}`);
+        // Clear auth state
+        setShowPasswordModal(false);
+        setPendingRoomId(null);
+        // Persist password for this session if needed, or just keep it in memory
+        if (password) {
+          localStorage.setItem('temp_session_pass', password);
+        }
+      } else if (response && response.error === "Unauthorized") {
+        // Trigger Modal
+        setPendingRoomId(roomId);
+        setShowPasswordModal(true);
+        // If we tried with a password and failed, show error
+        if (password) {
+          setAuthError(true);
+        }
+      } else {
+        alert("Failed to join room: " + (response?.error || 'Unknown error'));
+      }
+    });
+  };
+
+  const handleAuthSubmit = (password) => {
+    if (pendingRoomId) {
+      handleJoinRoom(pendingRoomId, password);
+    }
+  };
+
+  const handleLeaveRoom = () => {
+    setJoinedRoom(null);
+    setVideoSrc(null);
+    setVideoFile(null);
+    setIsHost(false);
+    setUserCount(0);
+    window.location.reload();
   };
 
   const handleVideoSelect = (src, type, file) => {
@@ -83,13 +131,32 @@ function App() {
     <div className="app-container">
       <header>
         <div className="header-content">
-          <h1 className="brand-logo">
-            <span style={{ fontSize: '1.6rem' }}>📽️</span> ChitraKatha
-          </h1>
+          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <h1 className="brand-logo">
+              <span style={{ fontSize: '1.6rem' }}>📽️</span> ChitraKatha
+            </h1>
+          </Link>
+
           <div className="status-group">
+            {/* Navigation Links */}
+            <Link
+              to="/"
+              className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
+            >
+              {joinedRoom ? '📺 Back to Room' : '🏠 Home'}
+            </Link>
+
+            <Link
+              to="/docs"
+              className={`nav-link ${location.pathname === '/docs' ? 'active' : ''}`}
+            >
+              📚 Guide
+            </Link>
+
+
             {joinedRoom && (
               <div className="role-badge" style={{ color: isHost ? 'var(--primary)' : 'var(--text-muted)' }}>
-                {isHost ? '👑 You are the Host' : '👤 You are a Viewer'}
+                {isHost ? '👑 Host' : '👤 Viewer'}
               </div>
             )}
 
@@ -107,56 +174,30 @@ function App() {
         </div>
       </header>
 
-      {/* Debug Bar (Hidden unless errors/dev) */}
-      {/* <div style={{ background: '#000', color: '#0f0', padding: '2px 20px', fontSize: '10px', fontFamily: 'monospace', borderBottom: '1px solid #333' }}>
-        DEBUG: {lastLog}
-      </div> */}
-
-      <main className={joinedRoom ? 'joined' : ''}>
-        <div className="animate-fade-in main-content">
-
-          {/* Minimalist Title (Only showing when Not Joined) */}
-          {!joinedRoom && (
-            <div style={{ marginBottom: '40px', textAlign: 'center', width: '100%' }}>
-              <h1 style={{ fontSize: '2.5rem', margin: 0, color: 'var(--text-main)' }}>ChitraKatha</h1>
-              <p style={{ color: 'var(--primary)', margin: '10px 0 0 0', fontSize: '1rem', opacity: 0.8 }}>sync local files peer-to-peer</p>
-            </div>
-          )}
-
-          {/* If Joined, layout is: Video (Left) -> Controls (Right) on Desktop */}
-
-          {/* Video Player */}
-          {joinedRoom && (
-            <div className="video-player-wrapper animate-fade-in">
-              <VideoPlayer
-                src={videoSrc}
-                roomId={joinedRoom}
-                isHost={isHost}
-                autoResume={true} // Enable seamless transitions for previews
-              />
-            </div>
-          )}
-
-          {/* Room Controls */}
-          <div className={joinedRoom ? "room-controls-wrapper" : ""} style={{ width: '100%', marginTop: joinedRoom ? '0' : '0' }}>
-            <RoomControls
-              onJoinRoom={handleJoinRoom}
-              onVideoSelect={handleVideoSelect}
+      <main className={`${joinedRoom ? 'joined' : ''} ${location.pathname === '/docs' ? 'docs-mode' : ''}`}>
+        <Routes>
+          <Route path="/" element={
+            <Home
               joinedRoom={joinedRoom}
+              isHost={isHost}
+              videoSrc={videoSrc}
+              videoFile={videoFile}
+              handleJoinRoom={handleJoinRoom}
+              handleLeaveRoom={handleLeaveRoom}
+              handleVideoSelect={handleVideoSelect}
+              handleFileReceived={handleFileReceived}
             />
-
-            {joinedRoom && (
-              <FileTransfer
-                isHost={isHost}
-                roomId={joinedRoom}
-                fileToShare={videoFile}
-                onFileReceived={handleFileReceived}
-              />
-            )}
-          </div>
-
-        </div>
+          } />
+          <Route path="/docs" element={<Documentation />} />
+        </Routes>
       </main>
+      <PasswordModal
+        isOpen={showPasswordModal}
+        onSubmit={handleAuthSubmit}
+        onCancel={() => setShowPasswordModal(false)}
+        isLoading={authLoading}
+        isError={authError}
+      />
     </div>
   );
 }
