@@ -2,6 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import SimplePeer from 'simple-peer';
 import socket from '../socket';
 
+const STUN_CONFIG = {
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun.l.google.com:5349" },
+        { urls: "stun:stun1.l.google.com:3478" },
+        { urls: "stun:stun1.l.google.com:5349" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:5349" },
+        { urls: "stun:stun3.l.google.com:3478" },
+        { urls: "stun:stun3.l.google.com:5349" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:5349" }
+    ]
+};
+
 const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
     // For Host:
     const [peers, setPeers] = useState({}); // { socketId: peerInstance }
@@ -17,6 +32,9 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         lastTime: Date.now(),
         bytesReceived: 0
     });
+
+    // UI Throttling
+    const lastUIUpdateRef = useRef(0);
 
 
 
@@ -67,7 +85,11 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                 console.log(`Host received signal from ${from}`);
                 // Host receives "Offer" from Client
                 if (!peers[from]) {
-                    const peer = new SimplePeer({ initiator: false, trickle: false });
+                    const peer = new SimplePeer({
+                        initiator: false,
+                        trickle: true,
+                        config: STUN_CONFIG
+                    });
 
                     peer.on('signal', (signal) => {
                         console.log(`Host sending Answer to ${from}`);
@@ -124,34 +146,38 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         }
         console.log(`[Sender] Starting transfer of ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-        const CHUNK_SIZE = 16 * 1024; // 16KB
-        const reader = new FileReader();
+        const CHUNK_SIZE = 256 * 1024; // 256KB
+        const MAX_BUFFERED_AMOUNT = 8 * 1024 * 1024; // 8MB buffer limit
         let offset = 0;
         let lastLoggedPercent = 0;
 
+        const reader = new FileReader();
+
         const readNextChunk = () => {
-            if (peer.destroyed) {
-                console.log("[Sender] Peer destroyed, stopping send.");
+            if (peer.destroyed) return;
+
+            // CRITICAL OPTIMIZATION:
+            // Check WebRTC buffer directly. If full, wait (throttle).
+            // Do NOT use peer.write() or 'drain'.
+            if (peer._channel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+                // Buffer full, retry in 50ms
+                setTimeout(readNextChunk, 50);
                 return;
             }
+
             const slice = file.slice(offset, offset + CHUNK_SIZE);
             reader.readAsArrayBuffer(slice);
         };
 
         reader.onload = (e) => {
             if (peer.destroyed) return;
-            const arrayBuffer = e.target.result;
-            // Convert ArrayBuffer to Uint8Array for stream compliance
-            const chunk = new Uint8Array(arrayBuffer);
+            const chunk = e.target.result; // ArrayBuffer is fine for .send()
 
             try {
-                // peer.write returns false if buffer is full
-                const canContinue = peer.write(chunk);
-                console.log(`[Sender] Wrote chunk of size ${chunk.byteLength}. Can continue: ${canContinue}`);
+                peer.send(chunk);
+                offset += chunk.byteLength;
 
-                offset += arrayBuffer.byteLength;
-
-                // Log progress every 10%
+                // Log progress
                 const percent = Math.floor((offset / file.size) * 100);
                 if (percent >= lastLoggedPercent + 10) {
                     console.log(`[Sender] Progress: ${percent}%`);
@@ -159,28 +185,18 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                 }
 
                 if (offset < file.size) {
-                    if (canContinue) {
-                        readNextChunk();
-                    } else {
-                        console.log(`[Sender] Backpressure at ${percent}%. Waiting for drain...`);
-                        peer.once('drain', () => {
-                            console.log(`[Sender] Drained. Resuming...`);
-                            readNextChunk();
-                        });
-                    }
+                    readNextChunk(); // Keep pumping data
                 } else {
-                    peer.write('Done'); // Sentinel
+                    peer.send('Done'); // Sentinel
                     console.log("[Sender] File sent completely");
                 }
             } catch (err) {
-                console.error("[Sender] Write error:", err);
+                console.error("[Sender] Send error:", err);
             }
         };
 
-        peer.on('error', (err) => console.error("[Sender] Peer Error:", err));
-        peer.on('close', () => console.log("[Sender] Peer Closed"));
-
-        // Start the loop
+        // Initialize connection
+        peer.send('START');
         readNextChunk();
     };
 
@@ -190,7 +206,11 @@ const FileTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
         chunksRef.current = [];
 
         console.log("[Receiver] Starting download from Host:", fileMeta.hostId);
-        const peer = new SimplePeer({ initiator: true, trickle: false });
+        const peer = new SimplePeer({
+            initiator: true,
+            trickle: true,
+            config: STUN_CONFIG
+        });
         clientPeerRef.current = peer;
 
         peer.on('signal', (signal) => {
