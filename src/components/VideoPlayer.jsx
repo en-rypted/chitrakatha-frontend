@@ -4,8 +4,37 @@ import socket from '../socket';
 // Flag to prevent infinite loops when programmatic update triggers event listeners
 let isRemoteUpdate = false;
 
-const VideoPlayer = ({ src, roomId, isHost }) => {
+const VideoPlayer = ({ src, roomId, isHost, autoResume }) => {
     const videoRef = useRef(null);
+    const lastTimeRef = useRef(0);
+    const wasPlayingRef = useRef(false);
+
+    // Handle seamless transition
+    useEffect(() => {
+        if (!videoRef.current) return;
+        const video = videoRef.current;
+
+        // Save state before src change (this runs cleanup before new src effect)
+        return () => {
+            if (autoResume) {
+                lastTimeRef.current = video.currentTime;
+                wasPlayingRef.current = !video.paused;
+                console.log(`[VideoPlayer] Saving state: Time=${lastTimeRef.current}, Playing=${wasPlayingRef.current}`);
+            }
+        };
+    }, [src, autoResume]);
+
+    // Restore state after src load
+    const handleLoadedMetadata = () => {
+        if (autoResume && lastTimeRef.current > 0) {
+            const video = videoRef.current;
+            console.log(`[VideoPlayer] Restoring state: Seek to ${lastTimeRef.current}`);
+            video.currentTime = lastTimeRef.current;
+            if (wasPlayingRef.current) {
+                video.play().catch(e => console.log("Auto-resume blocked:", e));
+            }
+        }
+    };
 
     useEffect(() => {
         // Only run this effect if we have a video element AND we are in a room
@@ -26,7 +55,16 @@ const VideoPlayer = ({ src, roomId, isHost }) => {
             if (data.action === 'PLAY') {
                 // Only seek if drifted significantly to avoid jumping
                 if (timeDiff > 0.5) video.currentTime = data.time;
-                video.play().catch(e => console.error("Auto-play blocked:", e));
+
+                // Safely attempt play
+                const playPromise = video.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => {
+                        console.log("Auto-play blocked:", e.name, e.message);
+                        // Ignored locally or show toast? 
+                        // For now we just supress the red console error
+                    });
+                }
             } else if (data.action === 'PAUSE') {
                 if (timeDiff > 0.5) video.currentTime = data.time;
                 video.pause();
@@ -97,22 +135,28 @@ const VideoPlayer = ({ src, roomId, isHost }) => {
     return (
         <div className="video-player-container">
             {src ? (
-                <video
-                    ref={videoRef}
-                    src={src}
-                    controls
-                    width="100%"
-                    onPlay={handlePlay}
-                    onPause={handlePause}
-                    onSeeked={handleSeeked}
-                    style={{ maxHeight: '80vh', backgroundColor: '#000' }}
-                />
+                <div>
+                    <video
+                        ref={videoRef}
+                        src={src}
+                        controls
+                        width="100%"
+                        onPlay={handlePlay}
+                        onPause={handlePause}
+                        onSeeked={handleSeeked}
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onError={(e) => {
+                            console.error("Video Error:", e.target.error);
+                        }}
+                        style={{ maxHeight: '80vh', backgroundColor: '#000', display: 'block' }}
+                    />
+                    {/* Optional: Add an error overlay state if needed, but for now simple log */}
+                </div>
             ) : (
                 <div style={{ padding: '20px', textAlign: 'center', background: '#eee' }}>
                     No video loaded. Select a file or URL above.
                 </div>
             )}
-            {isHost && <div style={{ color: 'green', marginTop: '5px', fontWeight: 'bold' }}>👑 You are the Host</div>}
         </div>
     );
 };

@@ -1,32 +1,277 @@
-body {
+/* Layout */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  /* Strict height */
+  overflow: hidden;
+  /* No scroll on body */
+  justify-content: center;
+  /* Vertical Center */
+  align-items: center;
+  /* Horizontal Center */
+}
+
+header {
+  position: relative;
+  /* Changed from absolute to prevent overlap */
+  width: 100%;
+  padding: 15px 20px;
+  background: transparent;
+  z-index: 10;
+  flex-shrink: 0;
+  /* Don't shrink */
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brand-logo {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f5f5;
-  color: #333;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+.status-group {
+  display: flex;
+  gap: 15px;
+  align-items: center;
 }
 
-.room-controls button {
-    cursor: pointer;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
+.role-badge {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.room-controls button:hover {
-    background-color: #0056b3;
+.connection-badge {
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  /* Prevent text wrap */
+  flex-shrink: 0;
+  /* Prevent squeezing */
 }
 
-.video-player-container video {
-    outline: none;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+/* Mobile Tweaks */
+@media (max-width: 600px) {
+  header {
+    padding: 10px 15px;
+  }
+
+  .brand-logo {
+    font-size: 1.2rem;
+  }
+
+  .role-badge {
+    display: none;
+  }
+
+  /* Hide role text on small screens to save space */
+  .connection-badge {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+  }
+}
+
+main {
+  width: 100%;
+  max-width: 1000px;
+  /* Narrower focus */
+  height: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Center vertically */
+  position: relative;
+}
+
+/* Main Content Wrapper */
+.main-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+/* When joined, we want top-aligned or specific layout */
+main.joined {
+  padding: 0;
+  max-width: 100%;
+  padding: 20px;
+  /* Keep padding for edges */
+  height: 100%;
+  /* Ensure it fills the rest of the flex container */
+  overflow-y: auto;
+  /* Allow scroll on mobile */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Desktop Split View */
+@media (min-width: 1024px) {
+  main.joined {
+    overflow: hidden;
+    /* Lock scroll on desktop/large screens */
+  }
+
+  main.joined .main-content {
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+  }
+
+  main.joined .video-player-wrapper {
+    flex: 3;
+    /* Video takes 3/4 space */
+    height: 100%;
+    max-height: 100%;
+    margin-top: 0;
+    border: 1px solid var(--text-muted);
+  }
+
+  main.joined .room-controls-wrapper {
+    flex: 1;
+    /* Controls take 1/4 space */
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
+  }
+}
+
+/* Clean Panels (No background, just spacing) */
+.glass-panel {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin-bottom: 30px;
+}
+
+.glass-panel::before {
+  display: none;
+}
+
+.glass-panel:hover {
+  background: transparent;
+  border: none;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Inputs - Minimalist Underline or Flat Box */
+input[type="text"] {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--text-muted);
+  border-radius: 0;
+  color: var(--text-main);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 1.5rem;
+  padding: 10px 0;
+  text-align: center;
+  transition: all 0.2s;
+  width: 60%;
+  /* Compact width */
+}
+
+input[type="text"]:focus {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+input[type="text"]::placeholder {
+  color: #444;
+}
+
+/* File Input */
+input[type="file"] {
+  background: transparent;
+  border: 1px dashed var(--text-muted);
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  box-sizing: border-box;
+  /* Critical for 100% width + padding */
+  max-width: 100%;
+}
+
+input[type="file"]:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+input[type="file"]::file-selector-button {
+  display: none;
+  /* Hide default button for cleaner look */
+}
+
+/* Video Player */
+.video-player-wrapper {
+  flex: 1;
+  /* Take remaining space */
+  min-height: 35vh;
+  /* Ensure video is visible on mobile */
+  /* Allow shrinking */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-top: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: none;
+  background: black;
+  width: 100%;
+  max-height: 80vh;
+  /* Don't be taller than screen */
+}
+
+video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  /* Keep aspect ratio */
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
 }
