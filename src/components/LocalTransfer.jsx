@@ -265,8 +265,25 @@ const LocalTransfer = ({ isHost, roomId, onFileReceived, fileToShare }) => {
                     </p>
 
                     <div style={{ marginTop: '15px' }}>
-                        <button onClick={handleDownload} style={{ width: '100%' }} className="secondary-btn">
+                        <button onClick={handleDownload} style={{ width: '100%', marginBottom: '10px' }} className="secondary-btn">
                             ⬇️ Download to Disk & Play
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                const targetUrl = `http://${remoteAgent.ip}:${remoteAgent.port}/stream/${remoteAgent.id}`;
+                                console.log("Streaming directly from:", targetUrl);
+                                onFileReceived(targetUrl);
+                            }}
+                            style={{
+                                width: '100%',
+                                background: 'transparent',
+                                border: '1px solid var(--primary)',
+                                color: 'var(--primary)'
+                            }}
+                            className="secondary-btn"
+                        >
+                            ▶️ Stream Instantly (No Wait)
                         </button>
 
                         {downloadProgress > 0 && downloadProgress < 100 && (
